@@ -1,0 +1,42 @@
+---
+name: szu-compute-platform
+description: 管理深圳大学算力调度平台的开发环境和实验任务，包括校园网接入、SSH、公钥、挂载与环境镜像。默认用 bita 提交；首次运行以最低价适用实例完成 dry-run 并保存镜像，后续实验复用。
+---
+
+# 深圳大学算力调度平台
+
+控制台：`https://console.aicloud.szu.edu.cn/`；开发环境页面：`/console/task-debug`。以当前用户需求、会话配置与授权确定操作范围。
+
+## 先确定运行模式
+
+| 本次需求 | 执行范围 |
+|---|---|
+| 查询、诊断或文档维护 | 完成所需检查，不创建算力实例 |
+| 仅启动环境供用户使用 | 验收 SSH、GPU 与挂载，保持运行；不自动训练或制作镜像 |
+| 首次运行代码，尚无兼容环境镜像 | 选满足要求的最低价实例，配置环境 → 最小 dry-run → 保存镜像 |
+| 后续实验，已有兼容环境镜像 | 使用该镜像，恢复挂载与当前源码，验收后按正式配置运行 |
+| 依赖、解释器或 CUDA/架构实质变化 | 重新初始化并保存新镜像版本；只改源码时同步并验证即可 |
+
+## 按需读取
+
+只读取当前阶段需要的文档；步骤已内化，不依赖外部教程。
+
+| 阶段 | 文档 |
+|---|---|
+| 校园网判断与 SecureLink 接入 | [campus-network.md](references/campus-network.md) |
+| DNS、Fake-IP、Clash/TUN 和系统代理绕过 | [proxy-bypass.md](references/proxy-bypass.md) |
+| bita 安装、登录、YAML 提交与文件传输 | [bita.md](references/bita.md) |
+| 本机密钥检查、生成、公钥登记与绑定 | [ssh-keys.md](references/ssh-keys.md) |
+| `/workspace`、数据集、挂载与持久化 | [storage-datasets.md](references/storage-datasets.md) |
+| 首次最低价初始化、dry-run 与镜像复用 | [environment-image.md](references/environment-image.md) |
+| SSH 变量、代码同步与运行验收 | [remote-runtime.md](references/remote-runtime.md) |
+| 查询、核价、调度与生命周期 API | [web-api.md](references/web-api.md) |
+
+## 执行顺序与共同约束
+
+1. **接入与认证。** 确认校园网或 VPN 可达；校外未接入时提醒并辅助 SecureLink 配置。复用有效网络和认证，优先使用本机 `bita` 已提供的能力；缺少的能力由控制台或当前前端已确认的 API 补足。
+2. **创建前。** 核对账号、支付团队、资源要求、时长与费用范围；分页检查同配置的 `Pending / Queuing / Running / Stopping` 任务，优先复用或等待。查询现价，再审查平台生成的 YAML、公钥绑定及挂载，不猜测配置字段。提交结果不明时先查询，不重复创建。
+3. **执行与验收。** 轮询准确任务 ID，直到目标状态、明确失败或本次等待时限到达。按运行模式执行；进程启动、HTTP 200 或目录存在分别不能代替任务完成、业务成功或持久化验证。
+4. **结束与报告。** 保留产物，按本次停止安排处理实例；已包含的停止授权无需重复询问，仅开机供使用时保持运行。删除需独立、明确授权。报告任务状态、结果位置、未完成部分；账单以平台为准，标价乘时长标为估算。
+
+私钥、认证令牌留在本机，只有公钥登记到平台。镜像保存运行环境；挂载保存源码、数据与产物，不能假定两者互相包含。任务、镜像、依赖与验证记录放在当前项目或任务产物中，技能只维护通用流程；遵循工作区的 Git 跟踪与忽略规则。
