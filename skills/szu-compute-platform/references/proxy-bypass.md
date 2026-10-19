@@ -30,26 +30,25 @@ Mihomo 的 `dns.nameserver-policy` 使用 `'+.szu.edu.cn'` 指向当前校园/VP
 对目标域名返回真实地址，按当前 `fake-ip-filter-mode` 配置：
 
 - `blacklist`：将 `'+.szu.edu.cn'` 加入 `fake-ip-filter`。
-- `rule`：将 `DOMAIN-SUFFIX,szu.edu.cn,real-ip` 放在可能命中的其他规则及兜底之前。
+- `rule`：将 `DOMAIN-SUFFIX,szu.edu.cn,real-ip` 放在其他匹配规则及兜底之前。
 - `whitelist`：只有匹配项才使用 Fake-IP，应确保深大域名不落入 Fake-IP 匹配范围，不能套用黑名单写法。
 
 保留当前模式，不为单一域名改变整个客户端行为。
 
 ### 连接代理绕过
 
-在规则模式中，把 `DOMAIN-SUFFIX,szu.edu.cn,DIRECT` 放在可能命中的代理规则和 `MATCH` 之前，验证实际连接命中。全局代理模式不能假定会执行分流规则。
+规则模式中，将 `DOMAIN-SUFFIX,szu.edu.cn,DIRECT` 放在其他匹配代理规则和 `MATCH` 前并验证命中；全局代理模式不作为分流规则生效证据。
 
 这里的直连仍经本机校园/VPN 路由；平台提供的 SSH SOCKS5 入口继续按连接说明使用。`DIRECT`、真实 DNS 上游和 Fake-IP 排除需分别检查，系统代理例外也不能替代 TUN/DNS 接管中的规则。
 
 ## 系统与 HTTP 客户端
 
 - 系统“不使用代理/绕过地址”覆盖根域与所有子域；PAC 中对应分支返回 `DIRECT`，位于通用代理分支之前。
-- 不操作浏览器代理扩展或浏览器 DNS 设置；诊断范围是本次 HTTP 客户端、系统路由及实际生效的代理/DNS 层。
 - 工具受 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 等变量影响时，在已有 `NO_PROXY` 和 `no_proxy` 中追加域名后缀例外，保留原值；不同工具的匹配能力单独验证。
 - 对应 API 明确应走校园直连时，Python `requests.Session().trust_env=False` 可让该会话忽略自动发现的代理；它不会关闭 Clash TUN、改变系统路由或解决 Fake-IP。使用会话级设置，避免为单一任务清空全局代理变量。
 
 ## 验证生效
 
 1. 用当前校园 DNS 查询目标域名，再检查系统与代理接管后的解析结果，确认真实地址可达。不要用固定 IP 或修改 hosts 作为默认修复。
-2. 重载后按需清理代理和系统的旧 DNS/Fake-IP 缓存并重建 HTTP 连接；核对实际 DNS 上游、规则命中和出口。
+2. 重载后检查解析是否仍使用旧 DNS/Fake-IP；仍用旧值则清理对应缓存并重建 HTTP 连接，再核对 DNS 上游、规则命中和出口。
 3. 验证 API 只读请求与 SSH 代理端口。核实响应来自目标服务后，HTTP 401/403 转入认证或权限检查；DNS 失败、超时和无路由继续网络诊断。

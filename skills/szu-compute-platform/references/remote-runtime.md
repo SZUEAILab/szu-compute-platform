@@ -2,7 +2,7 @@
 
 ## SSH 连接
 
-目标任务需为 `Running` 且 SSH 入口就绪。通过 [连接状态接口](web-api.md#排队与连接状态) 取得 `sshState/sshUrl`，结合任务与集群 API 构造连接参数；不打开网页复制命令。先理解响应格式，不猜字段，不对返回字符串使用 `eval`。
+任务为 `Running` 且 SSH 入口就绪后，从 [连接 API](web-api.md#排队与连接状态) 的 `sshState/sshUrl`、任务及集群响应构造参数。不对返回字符串执行 `eval`。
 
 若响应没有完整命令，按 [字段定位流程](interface-discovery.md#从当前前端确认行为) 查集群代理入口和当前前端构造逻辑；内部 IP、集群代理域名和任务 SSH 主机是不同角色。
 
@@ -10,26 +10,14 @@
 |---|---|
 | `SZU_SSH_KEY` | [密钥流程](ssh-keys.md) 选定的本机私钥绝对路径，与任务绑定公钥配对；不是 `.pub` 或平台密钥 ID |
 | `SZU_SSH_USER` | 平台命令 `user@host` 中的 `user` |
-| `SZU_SSH_HOST` | 同一命令的 `host`；可能是任务标识，不默认等同 API 的 `jobId` |
+| `SZU_SSH_HOST` | 同一命令的 `host`，从连接响应取值，不用 API `jobId` 代填 |
 | `SZU_SSH_PORT` | 平台命令 `-p` 的端口，未指定时为 `22` |
 | `SZU_PROXY_HOST` | 平台命令 `nc -x` 中的 SOCKS5 入口域名 |
 | `SZU_PROXY_PORT` | 同一 SOCKS5 入口的端口，与目标 SSH 端口分开 |
 
-平台 SOCKS5 入口把连接转发到目标任务；到该入口的校园/VPN 路由与 Clash 绕过规则另行配置。私钥负责容器 SSH 认证。`bita login` 不生成这些变量，API 查询任务 ID 也不替代实际连接主机。
+平台 SOCKS5 入口转发到目标任务；校园/VPN 路由与 [Clash 绕过](proxy-bypass.md) 分别验收。私钥负责 SSH 认证，任务 ID 不替代连接主机。
 
-可从当前响应提取明确字段直接赋值；需手动填写时，在同一终端执行：
-
-```bash
-read -rp 'Local private key (absolute path): ' SZU_SSH_KEY
-read -rp 'SSH user: ' SZU_SSH_USER
-read -rp 'SSH target host: ' SZU_SSH_HOST
-read -rp 'SSH target port [22]: ' SZU_SSH_PORT
-SZU_SSH_PORT="${SZU_SSH_PORT:-22}"
-read -rp 'Platform SOCKS5 host: ' SZU_PROXY_HOST
-read -rp 'Platform SOCKS5 port: ' SZU_PROXY_PORT
-```
-
-检查输入、私钥可读性与本机 `nc -h` 是否支持 `-X 5 -x`。Linux OpenBSD netcat 的连接形式为：
+在同一终端会话中按上表赋值，检查私钥可读、`nc -h` 支持 `-X 5 -x` 后连接。Linux OpenBSD netcat：
 
 ```bash
 ssh -i "$SZU_SSH_KEY" -p "$SZU_SSH_PORT" -o IdentitiesOnly=yes \
@@ -49,7 +37,7 @@ ssh.exe -i $SZU_SSH_KEY -p $SZU_SSH_PORT -o IdentitiesOnly=yes `
   -o "ProxyCommand=$SZU_PROXY_COMMAND" "$SZU_SSH_USER@$SZU_SSH_HOST"
 ```
 
-`scp` 可复用身份和 `ProxyCommand` 选项，但指定端口使用 `-P`，不能照搬 `ssh -p`。按需使用项目独立的 `UserKnownHostsFile`；首次连接可用 `StrictHostKeyChecking=accept-new`，主机指纹变化仍应拒绝并核查，不用关闭主机校验来解决连接问题。
+`scp` 复用身份和 `ProxyCommand`，端口使用 `-P`。使用项目独立的 `UserKnownHostsFile`；首次连接采用 `StrictHostKeyChecking=accept-new`，指纹变化时拒绝并核查，不关闭主机校验。
 
 失败时先确认任务和入口就绪，再按 [代理文档](proxy-bypass.md) 查 DNS、路由和代理端口。无路由、超时、拒绝连接与认证失败分开诊断；进入认证阶段后再查用户名、公钥绑定和私钥，不轮流尝试全部密钥。
 
@@ -66,7 +54,7 @@ ssh.exe -i $SZU_SSH_KEY -p $SZU_SSH_PORT -o IdentitiesOnly=yes `
 1. `nvidia-smi` 与任务规格一致，保留调度器的 CUDA 设备可见性，不套用宿主 GPU 编号。
 2. 实际执行解释器、关键导入和所需 GPU 运算，不能仅验 CPU 导入。
 3. 检查基础解释器、符号链接和动态库；持久化环境目录不保证镜像中的基础解释器存在。
-4. 可用时复用；修复依据项目锁文件、Python ABI 和 CUDA 兼容性，用包管理器及兼容缓存，不直接混合不同版本的包目录。
+4. 验收通过即复用；失败按锁文件、Python ABI、CUDA 兼容性通过包管理器修复，不混合不同版本的包目录。
 
 裸命令 `python` 不存在不等于镜像没有 Python。先查 `python3`、镜像已有 Conda/venv 的实际解释器及版本，再显式选择创建环境的解释器；不要无意中用系统 Python 替代项目要求的版本。记录实际 GPU 环境的依赖快照，不能拿本机 CPU/其他操作系统的快照代替。
 
@@ -76,12 +64,12 @@ ssh.exe -i $SZU_SSH_KEY -p $SZU_SSH_PORT -o IdentitiesOnly=yes `
 
 每次运行独立保存配置、日志、指标、检查点及所需离线跟踪数据，路径必须位于已验证挂载。验收目标进度、有限数值、预期评估和可读产物；启动成功不代表完成，短测试不代表性能结论。
 
-分别记录“进程已启动、主程序退出、产物验收通过、收集完成”。进度到达目标步数时，末次评估、检查点保存/恢复或哈希核验可能仍在执行，不能据此提前停机。首次 JIT 编译或 CPU 环境评估期间 GPU 利用率可能很低；结合进程、日志和指标判断，不只凭利用率重启训练。
+分别记录“已启动、主程序退出、产物验收通过、收集完成”。目标步数完成后仍须等待末次评估、检查点保存/恢复和哈希验收；GPU 利用率不作为停机或重启依据，用进程、日志和指标确认 JIT、训练、评估的实际阶段。
 
 ## 持久化与重建
 
 保存代码版本、环境镜像、未完成任务及 [挂载与数据版本](storage-datasets.md#持久化与重建)。新实例不复制整个临时容器文件系统，重新验证环境、GPU、数据和产物。停止/删除按 [生命周期流程](web-api.md#生命周期管理) 执行。
 
-## 按需测速
+## 传输测速
 
 仅需定位传输问题时，用唯一命名、大小明确的随机临时文件完成上传和下载，不启用压缩；以单调时钟计时，核对 SHA-256 后只清理本次文件。报告 `MiB/s = bytes / 1024**2 / seconds` 或 `Mbps = bytes * 8 / 1e6 / seconds`，说明是否含建连开销；整链路吞吐不能单独定位某段瓶颈。

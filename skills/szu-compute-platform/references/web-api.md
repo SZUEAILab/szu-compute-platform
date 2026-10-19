@@ -1,22 +1,18 @@
-# 控制台 API 与任务生命周期
+# 控制台 API 与生命周期
 
-按需查阅：[认证](#使用边界与认证)、[查询与核价](#查询与核价)、[创建任务](#创建任务)、[连接状态](#排队与连接状态)、[YAML 导出](#导出任务配置)、[生命周期](#生命周期管理)、[监控](#监控与附属服务)、[零变更检查](#无资源变更的接口检查)。
+导航：[认证](#使用边界与认证) · [查询核价](#查询与核价) · [创建](#创建任务) · [连接](#排队与连接状态) · [YAML](#导出任务配置) · [镜像](#保存环境镜像接口) · [停止删除](#生命周期管理) · [监控](#监控与附属服务)
 
 ## 使用边界与认证
 
-平台全部操作直接使用 Web API，不调用浏览器、Computer Use 或 bita 命令。内部接口不是稳定 SDK；方法、请求体与字段通过 HTTP 下载的当前静态前端和已有脱敏协议证据确认，遇构建变化、404/405 或字段缺失时重新检查，不靠猜测写接口。
+内部接口按已检查的部署维护；404/405、字段缺失或业务失败进入 [接口定位](interface-discovery.md)。写操作遵循 [主流程](../SKILL.md) 的任务范围。
 
-先区分 [CLI 凭据、CAS 密码和会话 token](bita.md#先分清三种凭据)。本机 `~/.bita/config.json` 的 `auth` 不是 `login -p` 所用的 `pubPassword`。确认文件可读、POSIX 权限 `600` 或 Windows 用户专属 ACL，且 `.auths["https://console.aicloud.szu.edu.cn"].auth` 为非空字符串；当前格式匹配时在内存中 Base64 解码，作为请求头 `token` 的值。字段缺失、解码失败或值为空即停止认证步骤，转入 [bita 认证](bita.md#认证)，不能携带空值继续请求。
+复用 `~/.bita/config.json` 时读取 `.auths["https://console.aicloud.szu.edu.cn"].auth`，在内存中 Base64 解码为请求头 `token`。文件权限为 POSIX `600` 或 Windows 用户专属 ACL。文件、字段、解码或只读验证失败即转 [认证流程](bita.md#web-api-认证流程)，不发送空 token。
 
-认证值不输出、不写回仓库、不复制到容器；不使用 `set -x`。需要命令行传递时避免凭据字面量，注意头参数可能短暂出现在进程列表中，完成后清除内存变量。用有权限的只读请求验证认证，不用创建任务探测。
-
-普通响应同时检查 HTTP 2xx、`message.code == 0` 和 `data` 中目标状态。监控响应可直接使用 `metrics_data`；YAML 和日志下载返回文本，按各自格式判断。单一产品 401/403 不足以证明整体登录失效。
+普通 JSON 响应检查 HTTP 2xx、`message.code == 0` 和非空 `data`；监控检查 `metrics_data`；YAML、日志按文本格式验收。单个接口的 401/403 需区分认证与权限。凭据不放入命令行字面量、日志、Git 或容器。
 
 ## 只读查询助手
 
-技能内的 [platform_read.py](../scripts/platform_read.py) 仅依赖 Python 标准库，复用本机 bita 配置；可查询集群、profile、可支付团队、套餐、任务、镜像、公钥、连接状态与账户资格。它只提供已列明的查询操作，不登录、不修改认证、不创建或停止资源。接口需要重新核对时先读 [定位流程](interface-discovery.md)。
-
-示例中的 `SZU_SKILL_DIR` 取本技能目录，集群和任务 ID 从当前查询结果取得，在同一终端中设置：
+[platform_read.py](../scripts/platform_read.py) 仅依赖 Python 标准库，从本机配置取得认证，只提供查询；不登录、不修改认证、不提交或停止资源。`SZU_SKILL_DIR` 指向本技能，集群与任务 ID 从查询结果取得：
 
 ```bash
 python "${SZU_SKILL_DIR:?Set the installed skill directory}/scripts/platform_read.py" clusters --out work/clusters.json
@@ -24,24 +20,22 @@ python "$SZU_SKILL_DIR/scripts/platform_read.py" jobs --cluster "${SZU_CLUSTER_I
 python "$SZU_SKILL_DIR/scripts/platform_read.py" job --id "${SZU_JOB_ID:?Use the current job ID}" --out work/job.json
 ```
 
-列表自动读完 `total` 指定的所有页；总数变化、重复 ID、提前空页或超过上限会报错，避免把部分结果当完整快照。`jobs` 覆盖表中开发环境类型，不替代分布式训练、推理等其他页面的任务列表。`account-status --id` 使用当前 profile 的用户 ID。`--direct` 只忽略此会话的显式代理发现，不绕过 TUN 或替代校园 VPN。
-
-结果以临时文件写完后原子替换为脱敏 JSON，终端只打印摘要；`pubPassword/token/cookie` 等字段和常见带凭据 URL 会被隐藏。不要用它导出 CLI 凭据，也不要把字段脱敏当成任意正文日志的通用清洗器。认证重定向不会自动跟随，失败转回认证或接口定位；`--out` 不能指向认证配置文件。
+- 按 `total` 读完分页；总数变化、重复 ID、提前空页、超过页数上限均报错。`jobs` 只覆盖开发环境类型，`account-status --id` 使用账号 ID。
+- 原子写入脱敏 JSON，终端只打印摘要；隐藏 `pubPassword/token/cookie/vncPwd` 等字段和带凭据的 URL。不用该输出导出凭据，也不把字段脱敏当作日志正文清洗。
+- 不跟随认证重定向，禁止 `--out` 覆盖认证配置。`--direct` 只忽略会话的显式代理发现，不改变 TUN、路由或校园接入。
 
 ## 查询与核价
 
-下表是接口定位线索，调用前确认当前部署仍使用对应结构。
-
-| 目标 | 方法与路径 | 请求或响应 |
+| 目标 | 方法与路径 | 字段 |
 |---|---|---|
 | 开发环境分页 | `POST /gateway/training/api/v1/job/debug/action/page` | 请求见下；响应 `data.list/total` |
-| 开发环境详情 | `GET /gateway/training/api/v1/job/debug/{jobId}` | 状态字段为 `state`；另含集群、团队、规格、时长、镜像、挂载和起止时间 |
-| 当前账号资料 | `GET /gateway/ram/api/v1/tenant` | 当前已验证 `data.name/pubPassword/token/cmdPassword/tenantInfo`；敏感字段不输出 |
-| 集群 | `POST /gateway/foundation/api/v1/cluster/action/list` | 请求 `{}`，响应数组 |
-| 团队分页 | `POST /gateway/foundation/api/v1/team/action/page` | 请求 `pageNum/pageSize`，响应 `data.list/total` |
-| 当前用户的付费团队 | `POST /gateway/order/api/v1/team-user/team-powers/action/page` | 按当前前端确认请求与用户权限，不将所有可见团队视为可支付团队 |
-| 资源池与套餐 | `POST /gateway/foundation/api/v1/resource-pool/action/list` | 请求 `sceneList:["training"]` 和 `clusterId`；响应数组及 `powerConfList` |
-| 账户创建资格 | `GET /gateway/order/api/v1/comp-powers/status/{userId}` | 用户标识取当前 profile/前端调用，不使用团队 ID 代替；按当前页面解释返回状态 |
+| 开发环境详情 | `GET /gateway/training/api/v1/job/debug/{jobId}` | `state`、集群、团队、规格、镜像、挂载、起止时间 |
+| 账号资料 | `GET /gateway/ram/api/v1/tenant` | `data.name/pubPassword/productId/tenantInfo/token/cmdPassword`；凭据脱敏 |
+| 集群 | `POST /gateway/foundation/api/v1/cluster/action/list` | 请求 `{}`；响应数组 |
+| 团队分页 | `POST /gateway/foundation/api/v1/team/action/page` | `pageNum/pageSize`；响应 `data.list/total` |
+| 可支付团队 | `POST /gateway/order/api/v1/team-user/team-powers/action/page` | 核对当前账号的支付权限 |
+| 资源池/套餐 | `POST /gateway/foundation/api/v1/resource-pool/action/list` | `sceneList:["training"]`、`clusterId`；响应含 `powerConfList` |
+| 创建资格 | `GET /gateway/order/api/v1/comp-powers/status/{userId}` | 账号 ID；状态含义从前端映射核对 |
 
 开发环境分页请求：
 
@@ -55,36 +49,39 @@ python "$SZU_SKILL_DIR/scripts/platform_read.py" job --id "${SZU_JOB_ID:?Use the
 }
 ```
 
-所有分页按 `total` 读全，再按 [主流程](../SKILL.md) 查重。优先用目标任务所属集群和授权团队；新建时查集群支持场景。团队额度按其类型与页面解释，不自行把不同字段相加为可用余额。
+完整分页后查重。资源池核对 `id/teamId/publicFlag/status`；套餐核对 `id/cardRealName/cardNum/cardMemory/cpuNum/memoryNum/price/status/sceneList`。团队可见性不代表支付权限，单个余额字段不能代替账户资格与计费方式。
 
-付费资格以当前账户状态检查、团队权限和计费方式为准；单个团队余额字段为负，不足以判定不能创建任务。配置多实例时按所有实例的单价、数量和最长运行时间合计预算，并预留已知存储等费用。时长字段的单位从当前前端换算或已有限时任务导出核对；已核对的开发环境版本中 YAML `maxRunTime` 与 API `debugDuration` 使用分钟，不能直接填页面显示的小时数。
-
-核价检查资源池 `id/teamId/publicFlag/status`，套餐 `id/cardRealName/cardNum/cardMemory/cpuNum/memoryNum/price/status/sceneList`。单位以当次页面和响应为准；不可用时不沿用旧 ID。分布式、微调和 HPO 使用各自页面状态机，不能机械替换 `debug` 路径。
+预算合计所有实例的单价、数量、最长占用时间及已知存储费用。已检查部署的 YAML `maxRunTime`、API `debugDuration` 使用分钟；提交前对照表单换算与导出配置核对单位。不可用资源不复用旧 ID。
 
 ## 创建任务
 
-通过 HTTP 下载的当前静态前端定位开发环境创建函数及 HTTP 封装，确认真实方法、路径、JSON 请求体和时长单位；不要把 YAML 导出接口当创建接口，也不把 YAML 原样作为 JSON 提交。按 [主流程](../SKILL.md) 完成授权范围、价格、完整分页查重、公钥、镜像和挂载检查，将脱敏请求及准确配置留在项目记录中，再发送创建请求。保存返回的任务 ID，查询详情核对配置并等待就绪。超时、空响应或没有明确 ID 时先查询匹配，不重发创建。当前没有维护通用创建脚本，不能把只读查询助手当作提交器；字段未确认就报告缺项，不回退 bita 或浏览器。
+从静态前端的创建函数与 HTTP 封装取得方法、路径、JSON 字段和单位；字段未确认则停止提交。YAML 导出接口不用于创建，YAML 不原样作为 JSON 发送。完成主流程核价、查重、镜像、公钥与挂载核对后提交一次，保存 ID 并查详情、调度状态。超时、空响应或无 ID 时先按唯一名称和配置查询，禁止重发。只读助手不是提交器。
 
 ## 排队与连接状态
 
-| 目标 | 方法与路径 | 要点 |
+| 目标 | 方法与路径 | 参数/响应 |
 |---|---|---|
-| 排队统计 | `POST /gateway/training/api/v1/job/action/waiting-time` | 开发环境请求 `{"jobType":"training","jobSubType":"training-debug"}` |
-| 连接入口 | `GET /gateway/training/api/v1/job/{jobId}/debug-url` | 核对 `sshState/sshUrl` 等服务状态和入口 |
-| Pod 入口 | `GET /gateway/training/api/v1/job/{jobId}/pod/debug-url` | 可为空数组 |
-| 排队序号 | `GET /gateway/training/api/v1/job/task/{taskId}/action/rank` | 参数取真实任务标识，不猜测与 `jobId` 相等 |
+| 排队统计 | `POST /gateway/training/api/v1/job/action/waiting-time` | `{"jobType":"training","jobSubType":"training-debug"}` |
+| 连接入口 | `GET /gateway/training/api/v1/job/{jobId}/debug-url` | `sshState/sshUrl`、服务状态；隐藏 `vncPwd` |
+| Pod 入口 | `GET /gateway/training/api/v1/job/{jobId}/pod/debug-url` | 数组；空数组不代表连接就绪 |
+| 排队序号 | `GET /gateway/training/api/v1/job/task/{taskId}/action/rank` | `taskId` 取真实任务标识，不用 `jobId` 代填 |
 
-`waitingTime/waitingJobNum/maxWaitingTime` 是统计，不代替目标任务轮询。返回连接 URL 不等于入口可用，先确认任务与服务就绪；响应可能含 `vncPwd`，与其他密码、签名 URL 和令牌一样不得回显。SSH 字段用法见 [remote-runtime.md](remote-runtime.md#ssh-连接)。
+`waitingTime/waitingJobNum/maxWaitingTime` 是统计，目标任务按准确 ID 轮询；取得 URL 后仍需验收入口。连接参数见 [SSH](remote-runtime.md#ssh-连接)。
 
 ## 导出任务配置
 
-`POST /gateway/training/api/v1/command/job/{jobId}/yaml/download` 成功返回 YAML 文本。保存为权限 `600` 的文件，核对内容、资源范围及 [挂载](storage-datasets.md) 和 [公钥](ssh-keys.md)；时长字段需确认单位。导出配置不等于授权重提，不把敏感 YAML 提交 Git，临时文件用后清除。
+`POST /gateway/training/api/v1/command/job/{jobId}/yaml/download` 返回 YAML 文本。受限保存并核对资源、时长、公钥、挂载。导出不授权重提，敏感 YAML 不进入 Git。
 
 ## 保存环境镜像接口
 
-当前接口定位线索：`POST /gateway/foundation/api/v1/image` 创建镜像记录，`GET /gateway/foundation/api/v1/image/{imageId}` 查询制作状态，`POST /gateway/foundation/api/v1/image/action/page` 分页查重。先检查当前保存镜像表单：`name/tag/content/uploadType/sceneList/jobId/teamId` 及请求补入的 `clusterId`；场景取 `GET /gateway/foundation/api/v1/dict?type=image_scene`，不猜数字类型或覆盖已有标签。
+| 操作 | 方法与路径 |
+|---|---|
+| 创建记录 | `POST /gateway/foundation/api/v1/image` |
+| 查询制作状态 | `GET /gateway/foundation/api/v1/image/{imageId}` |
+| 分页查重 | `POST /gateway/foundation/api/v1/image/action/page` |
+| 镜像场景 | `GET /gateway/foundation/api/v1/dict?type=image_scene` |
 
-保存返回的 ID 后按 [环境镜像流程](environment-image.md#保存环境镜像) 等待真正可用；当前已核对版本的 `status=2` 表示就绪，新部署仍需核对状态定义。创建结果不明先查完整镜像分页与准确名称/标签，不重复保存。接口接受请求不代表已完成或已在新实例验收。
+创建字段为 `name/tag/content/uploadType/sceneList/jobId/teamId/clusterId`，类型与枚举从前端定义取得。已检查部署的 `status=2` 表示就绪。保存 ID 后按 [镜像流程](environment-image.md#保存环境镜像) 验收；无明确 ID 时先按名称、标签完整查重，不重复保存。
 
 ## 生命周期管理
 
@@ -93,32 +90,26 @@ python "$SZU_SKILL_DIR/scripts/platform_read.py" job --id "${SZU_JOB_ID:?Use the
 | 停止开发环境 | `PUT /gateway/training/api/v1/job/debug/{jobId}/action/stop` |
 | 删除开发环境 | `DELETE /gateway/training/api/v1/job/debug/{jobId}` |
 
-按主流程确认本次停止/删除范围，重新核对 ID、名称、团队和状态。运行中先查 SSH 主进程与 GPU 工作，发现范围外活跃任务先报告。已停止直接报告，处于 `Stopping` 不重复停止；只发送一次请求，再有限轮询最终状态，超时如实报告，不假定已释放资源。
+核对授权范围、ID、团队、状态和活跃进程。`Stopped` 不再停止，`Stopping` 只轮询；发送一次停止请求并有界等待，超时报告未确认释放。删除后查详情或完整分页确认移除；任务删除与存储清理分别处理。重启、恢复、续期的接口未确认时不猜路径；分布式、微调、HPO 不套用开发环境路径。
 
-删除前确认允许的状态和将失去的元数据，完成后查详情或完整分页确认移除。不假设挂载存储随任务删除。
-
-重启、恢复与续期以当前页面能力为准，不猜 `start/restart/resume/renew/extend`。复制若只是预填创建页，仍是新任务流程，不等于恢复旧实例。
-
-多任务实验为每个任务保存准确 ID、名称、进程退出码和验收结果，及时启动已就绪实例；在既有停止安排内释放已验收完成的实例。收集依赖 SSH 时，在结果下载并校验前保留必要连接入口；可通过持久化存储下载时无需为取文件额外保留空闲 GPU。后台监控应有期限、状态记录和范围校验，不无限重发创建或停止请求。
-
-费用与耗时分开报告：墙钟时间、各次训练耗时和累计 GPU 占用时长可能不同；估算费用覆盖实例空闲、安装和取结果时段。`Stopped` 证明停止，不能用尚未结算的 `charged/runHours/power=0` 宣称零费用；标明按起止时间和单价估算，实际账单以平台为准。
+多任务分别保存 ID、退出码和验收结果，及时启动已就绪实例。依赖 SSH 收集时，下载与哈希核验完成后再停机。分别报告墙钟时间、训练耗时、累计占用时长；费用估算包含安装、空闲、收集时段。未结算的 `charged/runHours/power=0` 不作为零费用证据。
 
 ## 监控与附属服务
 
 ### 事件、日志和 Grafana
 
-监控接口需核对额外 `clusterid` 头，按 `metrics_data` 检查；日志、数据源访问配置只输出诊断必需的脱敏内容。
+监控核对额外 `clusterid` 头和 `metrics_data`；响应与日志先脱敏。
 
-| 功能 | 方法与路径 | 参数或边界 |
+| 功能 | 方法与路径 | 参数/边界 |
 |---|---|---|
-| 事件 | `GET /gateway/apis/monitoring.hero.ai/v1/events` | `task_id/start_time/end_time`，核对任务标识及纳秒时间单位 |
+| 事件 | `GET /gateway/apis/monitoring.hero.ai/v1/events` | `task_id/start_time/end_time`，时间单位纳秒 |
 | 日志 | `GET /gateway/apis/monitoring.hero.ai/v1/logs` | `pods/namespaces/start_time/end_time/sort/size/containers/keyword_filter` |
-| 直接下载日志 | `GET /gateway/apis/monitoring.hero.ai/v1/logs/export` | 同日志查询，返回文本；保存文件限制权限 |
-| 数据源查询 | `GET /gateway/apis/monitoring.hero.ai/v1/grafana/datasource/list/{clusterId}` | 参数为集群 ID |
-| 数据源创建 | `GET /gateway/apis/monitoring.hero.ai/v1/grafana/datasource/create/{clusterId}?is_master_cluster={0|1}` | 有副作用；参数取当前前端与集群类型，之后查询验证 |
-| 异步日志导出 | `POST /gateway/foundation/api/v1/async-task/job/{jobId}/pod/{pod}/log/action/export` | 有副作用；体取当前页面，核对时间单位、有效 bucket 与输出路径，等待任务及文件完成 |
+| 日志下载 | `GET /gateway/apis/monitoring.hero.ai/v1/logs/export` | 同日志查询；返回文本，受限保存 |
+| 数据源查询 | `GET /gateway/apis/monitoring.hero.ai/v1/grafana/datasource/list/{clusterId}` | 集群 ID |
+| 数据源创建 | `GET /gateway/apis/monitoring.hero.ai/v1/grafana/datasource/create/{clusterId}?is_master_cluster={0|1}` | 有副作用；参数取集群类型，创建后查询验收 |
+| 异步日志导出 | `POST /gateway/foundation/api/v1/async-task/job/{jobId}/pod/{pod}/log/action/export` | 有副作用；请求体从静态前端取得，核对时间单位、bucket、路径并等待导出完成 |
 
-空响应不等于创建成功，存储路径或团队 ID 不能猜作导出 bucket ID。
+存储路径、团队 ID 不代替 bucket ID，空响应不作为创建成功证据。
 
 ### TensorBoard
 
@@ -129,16 +120,12 @@ PUT    /gateway/training/api/v1/job/{tensorboardChildId}/tensorboard/action/stop
 DELETE /gateway/training/api/v1/job/{tensorboardChildId}/tensorboard
 ```
 
-创建体取当前前端。立即保留创建返回的独立子 ID，通过 `GET /gateway/training/api/v1/job/distributed/{id}` 验证 `jobSubType == other-tensorboard`。不能用父任务状态响应覆盖创建 ID，不能把父 ID 传入子任务写接口。
-
-用 TensorBoard 专用接口停止，确认子任务 `Stopped` 后按删除范围处理并核验移除。ID、类型或状态不符就停止写操作重查，不猜强制停止或改用普通分布式停止接口。
+创建体取静态前端；保存独立子 ID，通过 `GET /gateway/training/api/v1/job/distributed/{id}` 验证 `jobSubType == other-tensorboard`。停止和删除均用子 ID 与专用接口；不以父任务响应覆盖子 ID。类型或状态不符时停止写操作重查。
 
 ## 无资源变更的接口检查
 
-查询和直接下载可真实调用；创建、停止、删除、异步导出及有副作用的 GET 只检查前端定义，必要时用 `OPTIONS`。预检不能证明业务成功。
-
-前后比较相关完整分页任务、团队额度、资源池/套餐和附属服务的规范化快照。差异可能来自并发操作，先报告调查，不以额外写操作恢复。不为认证、连通性或接口测试创建付费任务或改动现有资源。
+只调用查询与直接下载；创建、停止、删除、异步导出和有副作用的 GET 只检查静态定义，`OPTIONS` 不作为业务成功证据。比较前后完整任务、团队、资源池快照；差异先调查，不用写操作恢复，不创建测试用付费任务。
 
 ## 故障判断
 
-401/403 结合业务码区分失效、权限及非法状态；404/405 或字段变化重新确认部署；HTTP 成功但业务失败按失败处理。列表为空而详情存在时查分页、集群及类型过滤，不立即再建任务。认证或接口失败时按 HTTP 证据排查，不切换到浏览器；提交前仍需完成查重核价。
+401/403 区分认证、权限与非法状态；404/405 或结构变化重新定位协议；HTTP 成功但业务失败仍判失败。列表为空而详情存在时检查分页、集群、类型过滤，不重复创建。
