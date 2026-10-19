@@ -14,7 +14,8 @@ szu-compute-platform/
         ├── SKILL.md
         ├── agents/
         │   └── openai.yaml
-        └── references/
+        ├── references/
+        └── scripts/
 ```
 
 `skills/szu-compute-platform/` 是完整、可独立安装的技能目录；其目录名与 `SKILL.md` 的 `name` 一致。`references/` 跟随技能一起安装，`agents/openai.yaml` 提供 Codex 展示元数据。
@@ -85,6 +86,8 @@ cp -R szu-compute-platform/skills/szu-compute-platform \
 | 首次 dry-run、环境镜像与复用 | [environment-image.md](skills/szu-compute-platform/references/environment-image.md) |
 | SSH 连接、代码同步与运行 | [remote-runtime.md](skills/szu-compute-platform/references/remote-runtime.md) |
 | 控制台 API、调度与生命周期 | [web-api.md](skills/szu-compute-platform/references/web-api.md) |
+| 接口字段定位与失败后的判断 | [interface-discovery.md](skills/szu-compute-platform/references/interface-discovery.md) |
+| 自动分页、脱敏保存的只读 API 查询脚本 | [platform_read.py](skills/szu-compute-platform/scripts/platform_read.py) |
 
 ## 维护
 

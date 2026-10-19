@@ -6,11 +6,27 @@
 
 只补足本机 `bita` 缺失的能力。内部接口不是稳定 SDK；方法、请求体与字段先从当前前端或浏览器请求确认，遇构建变化、404/405 或字段缺失时重新检查，不靠猜测写接口。
 
-CLI 登录保存的认证位于本机 `~/.bita/config.json`。确认文件可读、权限 `600`，且 `.auths["https://console.aicloud.szu.edu.cn"].auth` 为非空字符串；格式匹配时在内存中 Base64 解码，作为请求头 `token` 的值。字段缺失、解码失败或值为空即停止认证步骤，转入 [bita 登录](bita.md#认证)，不能携带空值继续请求。
+先区分 [CLI 凭据、CAS 密码和会话 token](bita.md#先分清三种凭据)。本机 `~/.bita/config.json` 的 `auth` 不是 `login -p` 所用的 `pubPassword`。确认文件可读、POSIX 权限 `600` 或 Windows 用户专属 ACL，且 `.auths["https://console.aicloud.szu.edu.cn"].auth` 为非空字符串；当前格式匹配时在内存中 Base64 解码，作为请求头 `token` 的值。字段缺失、解码失败或值为空即停止认证步骤，转入 [bita 认证](bita.md#认证)，不能携带空值继续请求。
 
 认证值不输出、不写回仓库、不复制到容器；不使用 `set -x`。需要命令行传递时避免凭据字面量，注意头参数可能短暂出现在进程列表中，完成后清除内存变量。用有权限的只读请求验证认证，不用创建任务探测。
 
 普通响应同时检查 HTTP 2xx、`message.code == 0` 和 `data` 中目标状态。监控响应可直接使用 `metrics_data`；YAML 和日志下载返回文本，按各自格式判断。单一产品 401/403 不足以证明整体登录失效。
+
+## 只读查询助手
+
+技能内的 [platform_read.py](../scripts/platform_read.py) 仅依赖 Python 标准库，复用本机 bita 配置；可查询集群、profile、可支付团队、套餐、任务、镜像、公钥、连接状态与账户资格。它只提供已列明的查询操作，不登录、不修改认证、不创建或停止资源。接口需要重新核对时先读 [定位流程](interface-discovery.md)。
+
+示例中的 `SZU_SKILL_DIR` 取本技能目录，集群和任务 ID 从当前查询结果取得，在同一终端中设置：
+
+```bash
+python "${SZU_SKILL_DIR:?Set the installed skill directory}/scripts/platform_read.py" clusters --out work/clusters.json
+python "$SZU_SKILL_DIR/scripts/platform_read.py" jobs --cluster "${SZU_CLUSTER_ID:?Use the current cluster ID}" --out work/jobs.json
+python "$SZU_SKILL_DIR/scripts/platform_read.py" job --id "${SZU_JOB_ID:?Use the current job ID}" --out work/job.json
+```
+
+列表自动读完 `total` 指定的所有页；总数变化、重复 ID、提前空页或超过上限会报错，避免把部分结果当完整快照。`jobs` 覆盖表中开发环境类型，不替代分布式训练、推理等其他页面的任务列表。`account-status --id` 使用当前 profile 的用户 ID。`--direct` 只忽略此会话的显式代理发现，不绕过 TUN 或替代校园 VPN。
+
+结果以临时文件写完后原子替换为脱敏 JSON，终端只打印摘要；`pubPassword/token/cookie` 等字段和常见带凭据 URL 会被隐藏。不要用它导出 CLI 凭据，也不要把字段脱敏当成任意正文日志的通用清洗器。认证重定向不会自动跟随，失败转回认证或接口定位；`--out` 不能指向认证配置文件。
 
 ## 查询与核价
 
@@ -22,7 +38,9 @@ CLI 登录保存的认证位于本机 `~/.bita/config.json`。确认文件可读
 | 开发环境详情 | `GET /gateway/training/api/v1/job/debug/{jobId}` | 状态、集群、团队、规格、时长、镜像、挂载和起止时间 |
 | 集群 | `POST /gateway/foundation/api/v1/cluster/action/list` | 请求 `{}`，响应数组 |
 | 团队分页 | `POST /gateway/foundation/api/v1/team/action/page` | 请求 `pageNum/pageSize`，响应 `data.list/total` |
+| 当前用户的付费团队 | `POST /gateway/order/api/v1/team-user/team-powers/action/page` | 按当前前端确认请求与用户权限，不将所有可见团队视为可支付团队 |
 | 资源池与套餐 | `POST /gateway/foundation/api/v1/resource-pool/action/list` | 请求 `sceneList:["training"]` 和 `clusterId`；响应数组及 `powerConfList` |
+| 账户创建资格 | `GET /gateway/order/api/v1/comp-powers/status/{userId}` | 用户标识取当前 profile/前端调用，不使用团队 ID 代替；按当前页面解释返回状态 |
 
 开发环境分页请求：
 
@@ -37,6 +55,8 @@ CLI 登录保存的认证位于本机 `~/.bita/config.json`。确认文件可读
 ```
 
 所有分页按 `total` 读全，再按 [主流程](../SKILL.md) 查重。优先用目标任务所属集群和授权团队；新建时查集群支持场景。团队额度按其类型与页面解释，不自行把不同字段相加为可用余额。
+
+付费资格以当前账户状态检查、团队权限和计费方式为准；单个团队余额字段为负，不足以判定不能创建任务。配置多实例时按所有实例的单价、数量和最长运行时间合计预算，并预留已知存储等费用。时长字段的单位从当前前端换算或已有限时任务导出核对；已核对的开发环境版本中 YAML `maxRunTime` 与 API `debugDuration` 使用分钟，不能直接填页面显示的小时数。
 
 核价检查资源池 `id/teamId/publicFlag/status`，套餐 `id/cardRealName/cardNum/cardMemory/cpuNum/memoryNum/price/status/sceneList`。单位以当次页面和响应为准；不可用时不沿用旧 ID。分布式、微调和 HPO 使用各自页面状态机，不能机械替换 `debug` 路径。
 
@@ -55,6 +75,12 @@ CLI 登录保存的认证位于本机 `~/.bita/config.json`。确认文件可读
 
 `POST /gateway/training/api/v1/command/job/{jobId}/yaml/download` 成功返回 YAML 文本。保存为权限 `600` 的文件，核对内容、资源范围及 [挂载](storage-datasets.md) 和 [公钥](ssh-keys.md)；时长字段需确认单位。导出配置不等于授权重提，不把敏感 YAML 提交 Git，临时文件用后清除。
 
+## 保存环境镜像接口
+
+当前接口定位线索：`POST /gateway/foundation/api/v1/image` 创建镜像记录，`GET /gateway/foundation/api/v1/image/{imageId}` 查询制作状态，`POST /gateway/foundation/api/v1/image/action/page` 分页查重。先检查当前保存镜像表单：`name/tag/content/uploadType/sceneList/jobId/teamId` 及请求补入的 `clusterId`；场景取 `GET /gateway/foundation/api/v1/dict?type=image_scene`，不猜数字类型或覆盖已有标签。
+
+保存返回的 ID 后按 [环境镜像流程](environment-image.md#保存环境镜像) 等待真正可用；当前已核对版本的 `status=2` 表示就绪，新部署仍需核对状态定义。创建结果不明先查完整镜像分页与准确名称/标签，不重复保存。接口接受请求不代表已完成或已在新实例验收。
+
 ## 生命周期管理
 
 | 操作 | 方法与路径 |
@@ -67,6 +93,10 @@ CLI 登录保存的认证位于本机 `~/.bita/config.json`。确认文件可读
 删除前确认允许的状态和将失去的元数据，完成后查详情或完整分页确认移除。不假设挂载存储随任务删除。
 
 重启、恢复与续期以当前页面能力为准，不猜 `start/restart/resume/renew/extend`。复制若只是预填创建页，仍是新任务流程，不等于恢复旧实例。
+
+多任务实验为每个任务保存准确 ID、名称、进程退出码和验收结果，及时启动已就绪实例；在既有停止安排内释放已验收完成的实例。收集依赖 SSH 时，在结果下载并校验前保留必要连接入口；可通过持久化存储下载时无需为取文件额外保留空闲 GPU。后台监控应有期限、状态记录和范围校验，不无限重发创建或停止请求。
+
+费用与耗时分开报告：墙钟时间、各次训练耗时和累计 GPU 占用时长可能不同；估算费用覆盖实例空闲、安装和取结果时段。`Stopped` 证明停止，不能用尚未结算的 `charged/runHours/power=0` 宣称零费用；标明按起止时间和单价估算，实际账单以平台为准。
 
 ## 监控与附属服务
 

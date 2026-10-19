@@ -13,26 +13,38 @@
 
 下载前确认入口和架构，检查文件类型、大小、SHA-256 与版本。自算哈希是文件标识，不等同于官方校验。Linux 默认安装至 `~/.local/bin/bita` 并检查 `PATH`；系统级安装使用相应权限，不修改目录为全员可写或擅自改 shell 启动文件。
 
+Windows 可将官方 MSI 解包到任务目录，定位 `bita.exe` 并核对版本后直接运行，不必默认做全局安装；所用解包工具是否需要提权以实际结果为准。保留来源、文件哈希与客户端版本，避免把旧目录中的同名程序当作本次下载版本。
+
 ## 认证
 
-先复用有效 CLI 认证。SecureLink/CAS 用于校园接入，浏览器会话也不会自动变成 CLI 认证。
+先用只读请求验证并复用已有认证。校园 VPN、平台登录和 SSH 是不同的认证层；SecureLink 已在线或浏览器已登录，都不等于 bita 配置已可用。
+
+### 先分清三种凭据
+
+| 凭据 | 用途 |
+|---|---|
+| 学校 CAS 密码及二次认证 | 学校统一认证，包括相应的 VPN 或平台登录流程 |
+| 平台生成的 CLI 凭据 | `bita login -p`；已核实的前端使用 `pubPassword` 字段，界面可能称认证 token |
+| 平台会话 token | 登录后的 API 请求头 `token`；本机 bita 配置的 `auth` 保存其 Base64 编码 |
+
+**优先使用当前平台页面生成的完整 bita 登录命令。** 已核实的前端从 `name`、`pubPassword`、`tenantInfo.name` 生成 `-u`、`-p`、`-t`。不要默认用 CAS 账号、学号或 CAS 密码代填，也不要将 API 会话 token 直接当作 `-p`。CLI 帮助或请求体里的字段名 `password` 不能单独证明它要求学校密码。字段在新版本变化时重新核对当前前端。
 
 | 参数或变量 | 来源 |
 |---|---|
-| `-u` / `SZU_BITA_ACCOUNT` | 本次指定的算力平台账号 |
-| `-p` / `SZU_BITA_CREDENTIAL` | 该账号的 CLI 登录凭据，在本机静默输入 |
+| `-u` / `SZU_BITA_ACCOUNT` | 平台生成命令中的账号，已核实前端字段为 `name` |
+| `-p` / `SZU_BITA_CREDENTIAL` | 平台生成的 CLI 凭据，已核实前端字段为 `pubPassword`；在本机静默输入 |
 | `-t` | 深大租户 `szdx`，不是团队名称或 ID |
 | `-e` | `https://console.aicloud.szu.edu.cn`，必须覆盖客户端默认端点 |
 
-本机版本通过 `-p` 接收密码时，在交互终端运行：
+命令参数与本机帮助一致时，可在用户可交互的本机终端执行；不要将含真实凭据的生成命令回显到聊天或日志：
 
 ```bash
 (
   set -e
   umask 077
   trap 'unset SZU_BITA_CREDENTIAL' EXIT
-  read -rp 'Bita account: ' SZU_BITA_ACCOUNT
-  read -rsp 'Bita credential: ' SZU_BITA_CREDENTIAL
+  read -rp 'Platform CLI account: ' SZU_BITA_ACCOUNT
+  read -rsp 'Platform CLI credential (not CAS password): ' SZU_BITA_CREDENTIAL
   printf '\n'
   bita login -u "$SZU_BITA_ACCOUNT" -p "$SZU_BITA_CREDENTIAL" \
     -t szdx -e https://console.aicloud.szu.edu.cn
@@ -43,7 +55,16 @@
 )
 ```
 
-检查整个命令的退出码；失败不继续提交。配置存在仅说明保存过凭据，还需按 [API 认证检查](web-api.md#使用边界与认证) 的只读请求确认有效。账号未知时询问账号，密码在本机输入；`-p` 会短暂出现在进程参数中，不开启 `set -x`，客户端支持更安全输入时优先使用。
+检查整个命令的退出码；失败不继续提交。配置存在仅说明保存过凭据，还需按 [API 认证检查](web-api.md#使用边界与认证) 验证。Windows 使用等效的用户专属 ACL，不照搬 `chmod`。`-p` 会短暂出现在进程参数中，不开启 `set -x`；客户端支持更安全输入时优先使用。不要反复启动用户无法交互的工具终端来索取凭据。
+
+### CLI 登录失败时的回退
+
+1. 先核对凭据类型、平台账号、租户和 endpoint。HTTP 500 不能单独证明密码错误、CLI 接口永久损坏或浏览器会话失效；不重复尝试 CAS 密码。
+2. 正确 CLI 凭据仍不可用时，可在已授权的平台登录范围内走官方 CAS/二次认证，取得平台会话 token。优先使用当前页面支持的流程；浏览器不可用或用户禁止 GUI 时，可按当前官方表单与脚本适配 HTTPS 会话，保留 cookie、隐藏字段和回调状态，不硬编码加密盐、票据或过期表单。
+3. 二次认证由用户完成。需要本机输入页时只监听回环地址，不记录凭据/验证码，请求仅转发到已确认的学校认证端点，用完关闭。CAS 到平台的重定向仅跟随已确认的 HTTPS 域名；不要输出可能含 token 的跳转 URL。
+4. 从本次正常登录回调取得 token，先以平台只读接口验证 HTTP、业务码和响应结构。确认当前客户端配置格式后，合并写入 `.auths[endpoint].auth = Base64(token)`，保留其他 endpoint 配置并限制文件权限；这一步不代表已经验证 token 可用作 `login -p`。
+
+Base64 只是编码，CLI 凭据、会话 token、cookie 和二次认证状态均留在本机受限位置，不进入镜像或实验包。会话过期时回到相应认证流程，不绕过二次认证。
 
 ## 提交任务
 
@@ -57,6 +78,8 @@ SZU_APPLY_STATUS=$?
 ```
 
 保存退出码与返回任务 ID。拒绝、超时或“参数无效”均不能作为成功证据；接受后仍需查询调度状态，不因响应不明重复提交。
+
+已遇到 `apply` 退出码为 0、标准输出却没有 ID 的情况。此时查询当前集群全部相关任务，按本次唯一名称、团队、创建时间及规格核对，记录准确 ID；不要把空输出当作未提交。若出现多个匹配项或配置不符，先调查，不再盲目创建。
 
 ## 文件传输
 

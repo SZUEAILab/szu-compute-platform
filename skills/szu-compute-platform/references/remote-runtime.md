@@ -4,6 +4,8 @@
 
 目标任务需为 `Running` 且 SSH 入口就绪。从该任务的连接说明取得命令，或查 [连接状态接口](web-api.md#排队与连接状态) 的 `sshState/sshUrl`。先理解响应格式，不猜字段，不对返回字符串使用 `eval`。
 
+若响应没有完整命令，按 [字段定位流程](interface-discovery.md#从当前前端确认行为) 查集群代理入口和当前前端构造逻辑；内部 IP、集群代理域名和任务 SSH 主机是不同角色。
+
 | 变量 | 来源 |
 |---|---|
 | `SZU_SSH_KEY` | [密钥流程](ssh-keys.md) 选定的本机私钥绝对路径，与任务绑定公钥配对；不是 `.pub` 或平台密钥 ID |
@@ -37,11 +39,25 @@ ssh -i "$SZU_SSH_KEY" -p "$SZU_SSH_PORT" -o IdentitiesOnly=yes \
 
 `%h/%p` 由 SSH 自动替换，变量不跨独立命令会话保存。平台未提供 SOCKS5 时不套用此 `ProxyCommand`；其他系统使用适配工具。缺少连接信息就继续查询，不复用已停止实例的地址。
 
+Windows 可复用 Git for Windows 附带的 `connect.exe`，先检查实际路径和本机帮助是否支持 `-5 -S`。在同一 PowerShell 会话中设置上述连接变量后，例如：
+
+```powershell
+$SZU_CONNECT_EXE = 'C:\Program Files\Git\mingw64\bin\connect.exe'
+if (-not (Test-Path -LiteralPath $SZU_CONNECT_EXE)) { throw 'Locate a compatible SOCKS5 helper first' }
+$SZU_PROXY_COMMAND = ('"{0}" -5 -S {1}:{2} %h %p' -f $SZU_CONNECT_EXE, $SZU_PROXY_HOST, $SZU_PROXY_PORT)
+ssh.exe -i $SZU_SSH_KEY -p $SZU_SSH_PORT -o IdentitiesOnly=yes `
+  -o "ProxyCommand=$SZU_PROXY_COMMAND" "$SZU_SSH_USER@$SZU_SSH_HOST"
+```
+
+`scp` 可复用身份和 `ProxyCommand` 选项，但指定端口使用 `-P`，不能照搬 `ssh -p`。按需使用项目独立的 `UserKnownHostsFile`；首次连接可用 `StrictHostKeyChecking=accept-new`，主机指纹变化仍应拒绝并核查，不用关闭主机校验来解决连接问题。
+
 失败时先确认任务和入口就绪，再按 [代理文档](proxy-bypass.md) 查 DNS、路由和代理端口。无路由、超时、拒绝连接与认证失败分开诊断；进入认证阶段后再查用户名、公钥绑定和私钥，不轮流尝试全部密钥。
 
 ## 挂载与代码同步
 
 按 [storage-datasets.md](storage-datasets.md) 验收挂载后，同步当前工作区需要的源码、资源及依赖清单，包含本次所需未提交修改，不仅复制 Git HEAD。排除密钥、本机环境、无关数据与旧结果；更新远程代码前检查活跃工作，使用快照或独立目录避免覆盖运行版本。
+
+确认上传正常结束并核对文件后再执行，避免读到仍在写入的脚本。Windows 生成并传给 Linux `bash` 的脚本使用 UTF-8 无 BOM、LF 换行；`pipefail\r` 等错误先查换行，不重建实例。
 
 ## 环境复用与修复
 
@@ -52,11 +68,15 @@ ssh -i "$SZU_SSH_KEY" -p "$SZU_SSH_PORT" -o IdentitiesOnly=yes \
 3. 检查基础解释器、符号链接和动态库；持久化环境目录不保证镜像中的基础解释器存在。
 4. 可用时复用；修复依据项目锁文件、Python ABI 和 CUDA 兼容性，用包管理器及兼容缓存，不直接混合不同版本的包目录。
 
+裸命令 `python` 不存在不等于镜像没有 Python。先查 `python3`、镜像已有 Conda/venv 的实际解释器及版本，再显式选择创建环境的解释器；不要无意中用系统 Python 替代项目要求的版本。记录实际 GPU 环境的依赖快照，不能拿本机 CPU/其他操作系统的快照代替。
+
 ## 运行与验收
 
 按 [主流程的运行模式](../SKILL.md#先确定运行模式) 选择初始化 dry-run、正式运行或仅开机。使用当前项目入口和本次参数，记录真实退出码，后台运行还需保存 PID 和启动命令。
 
 每次运行独立保存配置、日志、指标、检查点及所需离线跟踪数据，路径必须位于已验证挂载。验收目标进度、有限数值、预期评估和可读产物；启动成功不代表完成，短测试不代表性能结论。
+
+分别记录“进程已启动、主程序退出、产物验收通过、收集完成”。进度到达目标步数时，末次评估、检查点保存/恢复或哈希核验可能仍在执行，不能据此提前停机。首次 JIT 编译或 CPU 环境评估期间 GPU 利用率可能很低；结合进程、日志和指标判断，不只凭利用率重启训练。
 
 ## 持久化与重建
 

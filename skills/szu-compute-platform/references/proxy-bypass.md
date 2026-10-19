@@ -2,6 +2,8 @@
 
 先按 [campus-network.md](campus-network.md) 确认校园内网接入可用，再核对代理配置。
 
+按实际接管流量的层选择必要修改，先保存原值并保留其他规则。系统代理例外、Clash/Mihomo 分流和 TUN/DNS 是不同配置；记录实际改动的层，不把只改系统绕过列表报告成修改了 Clash 订阅。
+
 ## 目标范围与匹配语法
 
 DNS 绕过、Fake-IP 绕过和代理绕过都按 `*.szu.edu.cn` 这类通配规则覆盖深大服务，不逐个维护主机。需要匹配根域时一并覆盖 `szu.edu.cn`；注意平台入口属于多级子域名。
@@ -44,6 +46,7 @@ Mihomo 的 `dns.nameserver-policy` 使用 `'+.szu.edu.cn'` 指向当前校园/VP
 - 系统“不使用代理/绕过地址”覆盖根域与所有子域；PAC 中对应分支返回 `DIRECT`，位于通用代理分支之前。
 - 浏览器独立代理扩展同步配置。安全 DNS/DoH 若绕开校园解析，应为深大域名使用系统/校园解析或适当例外。
 - 工具受 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 等变量影响时，在已有 `NO_PROXY` 和 `no_proxy` 中追加域名后缀例外，保留原值；不同工具的匹配能力单独验证。
+- 对应 API 明确应走校园直连时，Python `requests.Session().trust_env=False` 可让该会话忽略自动发现的代理；它不会关闭 Clash TUN、改变系统路由或解决 Fake-IP。使用会话级设置，避免为单一任务清空全局代理变量。
 
 ## 验证生效
 
