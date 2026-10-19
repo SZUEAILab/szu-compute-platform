@@ -94,3 +94,9 @@ cp -R szu-compute-platform/skills/szu-compute-platform \
 ## 维护
 
 技能只保存通用流程，任务、镜像、依赖及验证记录留在使用方项目或产物中。修改后检查技能目录的元数据、相对引用和安装结果；平台内部接口按当前部署确认。
+
+在仓库根目录运行离线回归测试（仅依赖 Python 标准库，不访问平台或读取真实凭据）：
+
+```bash
+python -B -m unittest discover -s tests -v
+```

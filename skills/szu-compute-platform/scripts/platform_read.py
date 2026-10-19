@@ -29,8 +29,8 @@ ROUTES = {
 }
 PAGED = {'teams', 'jobs', 'images', 'official-images'}
 CLUSTER_REQUIRED = {'resources', 'jobs', 'images', 'official-images'}
-SECRET_KEY = re.compile(r'token|password|credential|secret|private.?key|authorization|cookie|signature|api.?key|access.?key|ticket|session.?id|^auth$', re.I)
-SECRET_URL = re.compile(r'(?:[?&#])(?:[^=&#]*(?:token|password|signature|credential|secret|access[_-]?key|api[_-]?key|ticket|cookie)|auth)=', re.I)
+SECRET_KEY = re.compile(r'token|password|passwd|pwd|passphrase|credential|secret|private.?key|authorization|cookie|signature|api.?key|access.?key|ticket|session.?id|^auth$', re.I)
+SECRET_URL = re.compile(r'(?:[?&#])(?:[^=&#]*(?:token|password|passwd|pwd|passphrase|signature|credential|secret|access[_-]?key|api[_-]?key|ticket|cookie)|auth)=', re.I)
 
 
 class APIError(Exception):

@@ -35,7 +35,8 @@ python "$SZU_SKILL_DIR/scripts/platform_read.py" job --id "${SZU_JOB_ID:?Use the
 | 目标 | 方法与路径 | 请求或响应 |
 |---|---|---|
 | 开发环境分页 | `POST /gateway/training/api/v1/job/debug/action/page` | 请求见下；响应 `data.list/total` |
-| 开发环境详情 | `GET /gateway/training/api/v1/job/debug/{jobId}` | 状态、集群、团队、规格、时长、镜像、挂载和起止时间 |
+| 开发环境详情 | `GET /gateway/training/api/v1/job/debug/{jobId}` | 状态字段为 `state`；另含集群、团队、规格、时长、镜像、挂载和起止时间 |
+| 当前账号资料 | `GET /gateway/ram/api/v1/tenant` | 当前已验证 `data.name/pubPassword/token/cmdPassword/tenantInfo`；敏感字段不输出 |
 | 集群 | `POST /gateway/foundation/api/v1/cluster/action/list` | 请求 `{}`，响应数组 |
 | 团队分页 | `POST /gateway/foundation/api/v1/team/action/page` | 请求 `pageNum/pageSize`，响应 `data.list/total` |
 | 当前用户的付费团队 | `POST /gateway/order/api/v1/team-user/team-powers/action/page` | 按当前前端确认请求与用户权限，不将所有可见团队视为可支付团队 |
@@ -73,7 +74,7 @@ python "$SZU_SKILL_DIR/scripts/platform_read.py" job --id "${SZU_JOB_ID:?Use the
 | Pod 入口 | `GET /gateway/training/api/v1/job/{jobId}/pod/debug-url` | 可为空数组 |
 | 排队序号 | `GET /gateway/training/api/v1/job/task/{taskId}/action/rank` | 参数取真实任务标识，不猜测与 `jobId` 相等 |
 
-`waitingTime/waitingJobNum/maxWaitingTime` 是统计，不代替目标任务轮询。返回连接 URL 不等于入口可用，先确认任务与服务就绪；签名 URL、密码和令牌不回显。SSH 字段用法见 [remote-runtime.md](remote-runtime.md#ssh-连接)。
+`waitingTime/waitingJobNum/maxWaitingTime` 是统计，不代替目标任务轮询。返回连接 URL 不等于入口可用，先确认任务与服务就绪；响应可能含 `vncPwd`，与其他密码、签名 URL 和令牌一样不得回显。SSH 字段用法见 [remote-runtime.md](remote-runtime.md#ssh-连接)。
 
 ## 导出任务配置
 
