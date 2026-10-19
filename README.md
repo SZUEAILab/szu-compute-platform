@@ -2,7 +2,9 @@
 
 遵循 Agent Skills 格式的技能仓库，提供 `szu-compute-platform`。可通过 Skills CLI 或 Codex 的 skill-installer 按名称/路径发现并安装。
 
-技能覆盖校园网与 SecureLink 接入、DNS/Fake-IP/代理绕过、bita 登录与提交、SSH 密钥、公钥登记、工作区及数据集挂载、环境镜像和任务生命周期。
+技能覆盖校园网诊断、DNS/Fake-IP/代理绕过、Web API 认证与任务管理、SSH 密钥、公钥登记、工作区及数据集挂载、环境镜像和任务生命周期。
+
+平台认证与操作仅使用 Web API，禁止浏览器、浏览器自动化、Computer Use 和 GUI 回退，不要求用户打开网页复制命令或凭据。可通过 HTTP 下载静态 HTML/JS 离线定位接口；已有 bita 配置仅用于认证兼容，不执行 bita 命令。SSH/SCP 用于远端运行与产物传输。
 
 ## 仓库结构
 
@@ -80,7 +82,7 @@ cp -R szu-compute-platform/skills/szu-compute-platform \
 | 技能范围、运行模式与文档导航 | [SKILL.md](skills/szu-compute-platform/SKILL.md) |
 | 校园网判断与 SecureLink | [campus-network.md](skills/szu-compute-platform/references/campus-network.md) |
 | DNS、Fake-IP 与代理绕过 | [proxy-bypass.md](skills/szu-compute-platform/references/proxy-bypass.md) |
-| bita 安装、认证、提交与传输 | [bita.md](skills/szu-compute-platform/references/bita.md) |
+| Web API 认证、pubPassword 与 bita 配置兼容 | [bita.md](skills/szu-compute-platform/references/bita.md) |
 | SSH 密钥检查、生成、公钥登记 | [ssh-keys.md](skills/szu-compute-platform/references/ssh-keys.md) |
 | 工作区、数据集与持久化 | [storage-datasets.md](skills/szu-compute-platform/references/storage-datasets.md) |
 | 首次 dry-run、环境镜像与复用 | [environment-image.md](skills/szu-compute-platform/references/environment-image.md) |

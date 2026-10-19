@@ -1,4 +1,4 @@
 interface:
   display_name: "深圳大学算力调度平台"
-  short_description: "准备校园网、SSH 和挂载，首次低价 dry-run 保存镜像，后续实验复用"
-  default_prompt: "使用 $szu-compute-platform 按本次需求管理深大算力任务；首次运行先用最低价适用实例完成 dry-run 并保存环境镜像，后续实验复用。"
+  short_description: "仅用 Web API 管理平台，禁止浏览器；首次低价 dry-run 保存镜像并复用"
+  default_prompt: "使用 $szu-compute-platform 仅通过 Web API 管理深大算力任务，禁止浏览器和 Computer Use；首次低价 dry-run 后保存镜像，后续实验复用。"

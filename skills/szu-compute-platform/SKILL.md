@@ -1,11 +1,17 @@
 ---
 name: szu-compute-platform
-description: 管理深圳大学算力调度平台的开发环境和实验任务，包括校园网接入、SSH、公钥、挂载与环境镜像。默认用 bita 提交；首次运行以最低价适用实例完成 dry-run 并保存镜像，后续实验复用。
+description: 仅通过 Web API 管理深圳大学算力调度平台的认证、开发环境和实验任务，禁止浏览器与 Computer Use。支持校园网诊断、SSH、公钥、挂载与环境镜像；首次低价 dry-run 后保存镜像，后续实验复用。
 ---
 
 # 深圳大学算力调度平台
 
 控制台：`https://console.aicloud.szu.edu.cn/`；开发环境页面：`/console/task-debug`。以当前用户需求、会话配置与授权确定操作范围。
+
+## 操作通道
+
+平台认证、查询、创建、停止、镜像、公钥和存储管理仅通过 Web API 完成，不使用浏览器、内置浏览器、浏览器自动化、Computer Use 或 GUI 回退，也不要求用户打开网页、复制命令、cookie 或 token。HTTP 客户端可下载当前 HTML/JS 作离线接口定位，不渲染或执行页面。`bita` 仅作为已有认证配置的兼容来源和协议参考，不调用其登录、提交或传输命令。SSH/SCP、本机文件与进程操作用于远端代码运行和产物传输。
+
+校园接入未就绪时按网络参考处理；缺少已确认的无浏览器认证方式时说明具体阻塞，不切换到浏览器。
 
 ## 先确定运行模式
 
@@ -25,7 +31,7 @@ description: 管理深圳大学算力调度平台的开发环境和实验任务�
 |---|---|
 | 校园网判断与 SecureLink 接入 | [campus-network.md](references/campus-network.md) |
 | DNS、Fake-IP、Clash/TUN 和系统代理绕过 | [proxy-bypass.md](references/proxy-bypass.md) |
-| bita 安装、CLI 凭据、CAS/MFA 回退、YAML 提交与文件传输 | [bita.md](references/bita.md) |
+| Web API 认证、pubPassword、CAS/MFA 与 bita 配置兼容 | [bita.md](references/bita.md) |
 | 本机密钥检查、生成、公钥登记与绑定 | [ssh-keys.md](references/ssh-keys.md) |
 | `/workspace`、数据集、挂载与持久化 | [storage-datasets.md](references/storage-datasets.md) |
 | 首次最低价初始化、dry-run 与镜像复用 | [environment-image.md](references/environment-image.md) |
@@ -37,8 +43,8 @@ description: 管理深圳大学算力调度平台的开发环境和实验任务�
 
 ## 执行顺序与共同约束
 
-1. **接入与认证。** 确认校园网或 VPN 可达；校外未接入时提醒并辅助 SecureLink 配置。复用有效认证；新登录优先使用平台生成的 bita 命令，区分 CLI 凭据、CAS 密码和 API 会话 token。优先使用本机 `bita` 已提供的能力；缺少的能力由当前前端已确认的 API 补足。
-2. **创建前。** 核对账号、支付团队、资源要求、时长与费用范围；分页检查同配置的 `Pending / Queuing / Running / Stopping` 任务，优先复用或等待。查询现价，再审查平台生成的 YAML、公钥绑定及挂载，不猜测配置字段。提交结果不明时先查询，不重复创建。
+1. **接入与认证。** 确认校园网或 VPN 可达。优先验证并复用本机已有平台会话；新认证按 [HTTP 认证流程](references/bita.md#web-api-认证流程) 处理，区分 `pubPassword`、CAS 密码和 API 会话 token。平台操作直接调用当前部署已确认的 Web API。
+2. **创建前。** 核对账号、支付团队、资源要求、时长与费用范围；分页检查同配置的 `Pending / Queuing / Running / Stopping` 任务，优先复用或等待。查询现价，再审查 API 创建请求、可导出的 YAML、公钥绑定及挂载，不猜测配置字段。提交结果不明时先查询，不重复创建。
 3. **执行与验收。** 轮询准确任务 ID，直到目标状态、明确失败或本次等待时限到达。多任务逐个跟进调度、验收和启动，避免只看首个任务而让其他已就绪实例空转。按运行模式执行；进程启动、HTTP 200 或目录存在分别不能代替任务完成、业务成功或持久化验证。
 4. **结束与报告。** 保留产物，按本次停止安排处理实例；已包含的停止授权无需重复询问，仅开机供使用时保持运行。删除需独立、明确授权。报告任务状态、结果位置、未完成部分；账单以平台为准，标价乘时长标为估算。
 
