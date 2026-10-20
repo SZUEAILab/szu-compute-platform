@@ -1,6 +1,6 @@
 ---
 name: szu-compute-platform
-description: 通过 Web API 管理深圳大学算力平台的认证、开发环境、任务和镜像。禁止平台网页操作与 Computer Use；首次以最低价适用实例完成 dry-run 并保存镜像，后续实验复用。
+description: 通过 Web API 管理深圳大学算力平台的登录、开发环境、任务和镜像，支持 SSH 实验运行、数据挂载与环境复用。
 ---
 
 # 深圳大学算力平台
@@ -18,7 +18,7 @@ description: 通过 Web API 管理深圳大学算力平台的认证、开发环�
 | 需求 | 执行范围 |
 |---|---|
 | 查询或诊断 | 只读，不创建实例 |
-| 仅开机供用户使用 | 验收 SSH、GPU、挂载后保持运行 |
+| 仅开机供用户使用 | 验收 SSH、所选计算设备与挂载后保持运行 |
 | 首次运行或依赖、解释器、CUDA/架构变化 | 最低价适用实例 → 配置 → dry-run → 保存镜像 |
 | 已有兼容镜像 | 复用镜像、恢复挂载、同步代码并验收 |
 
@@ -26,7 +26,7 @@ description: 通过 Web API 管理深圳大学算力平台的认证、开发环�
 
 ## 执行顺序
 
-1. **接入与认证。** 验证校园/VPN 路由与已有会话。无有效会话时复用附带的 [本机登录与二次认证脚本](references/local-login.md)，由用户手动输入；完整初始化执行 CAS → token A → `pubPassword` → 登录交换 → token B → 验证保存，见 [认证](references/bita.md#web-api-认证流程)。
+1. **接入与认证。** 验证校园/VPN 路由，按 [认证流程](references/bita.md) 只读验收并复用已有会话。需要登录时运行 [输入服务](references/local-login.md)，用户手动填写；提供经健康检查的当前地址、会话标识与有效期。
 2. **创建前。** 核对账号、支付团队、规格、时长、总预算；查实时价格，完整分页查重 `Pending/Queuing/Running/Stopping`，复用匹配任务。核对镜像、公钥和挂载；提交结果不明先查询，禁止重复创建。
 3. **执行。** 按准确 ID 有限轮询；多任务分别跟进调度和启动。按上表运行并验收退出码、评估、检查点和产物，完成收集后按既定停止安排释放实例。
 4. **交付。** 报告状态、产物、未完成步骤及费用。已授权的停止不重复询问，删除须有明确授权；仅开机模式保持运行。标价乘占用时长写为估算，结算费用取平台账单。
@@ -37,7 +37,8 @@ description: 通过 Web API 管理深圳大学算力平台的认证、开发环�
 |---|---|
 | 校园网/VPN 诊断 | [campus-network.md](references/campus-network.md) |
 | DNS、Clash/TUN、系统代理 | [proxy-bypass.md](references/proxy-bypass.md) |
-| CAS、CLI 凭据与会话 | [bita.md](references/bita.md) |
+| 凭据类型、会话复用与登录交换 | [bita.md](references/bita.md) |
+| 登录输入页、企业微信验证码与 SSH 转发 | [local-login.md](references/local-login.md) |
 | SSH 密钥登记与绑定 | [ssh-keys.md](references/ssh-keys.md) |
 | 工作区、数据集、持久化 | [storage-datasets.md](references/storage-datasets.md) |
 | dry-run、镜像制作与复用 | [environment-image.md](references/environment-image.md) |
