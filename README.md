@@ -4,7 +4,7 @@
 
 技能覆盖校园网诊断、DNS/Fake-IP/代理绕过、Web API 认证与任务管理、SSH 密钥、公钥登记、工作区及数据集挂载、环境镜像和任务生命周期。
 
-平台认证与操作仅使用 Web API，禁止浏览器、浏览器自动化、Computer Use 和 GUI 回退，不要求用户打开网页复制命令或凭据。可通过 HTTP 下载静态 HTML/JS 离线定位接口；已有 bita 配置仅用于认证兼容，不执行 bita 命令。SSH/SCP 用于远端运行与产物传输。
+平台认证与操作仅使用 Web API，禁止平台网页操作、浏览器自动化和 Computer Use，不要求用户打开平台网页复制命令或凭据。无头服务器允许用户手动打开经 SSH 转发的专用凭据输入页，具体约束见 [凭据输入](skills/szu-compute-platform/references/bita.md#凭据输入)。可通过 HTTP 下载静态 HTML/JS 离线定位接口；已有 bita 配置仅用于认证兼容，不执行 bita 命令。SSH/SCP 用于远端运行与产物传输。
 
 ## 仓库结构
 
