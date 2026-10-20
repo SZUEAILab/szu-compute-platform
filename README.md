@@ -83,6 +83,7 @@ cp -R szu-compute-platform/skills/szu-compute-platform \
 | 校园网判断与 SecureLink | [campus-network.md](skills/szu-compute-platform/references/campus-network.md) |
 | DNS、Fake-IP 与代理绕过 | [proxy-bypass.md](skills/szu-compute-platform/references/proxy-bypass.md) |
 | Web API 认证、pubPassword 与 bita 配置兼容 | [bita.md](skills/szu-compute-platform/references/bita.md) |
+| CAS、企业微信验证码输入服务及无头转发 | [local-login.md](skills/szu-compute-platform/references/local-login.md) |
 | SSH 密钥检查、生成、公钥登记 | [ssh-keys.md](skills/szu-compute-platform/references/ssh-keys.md) |
 | 工作区、数据集与持久化 | [storage-datasets.md](skills/szu-compute-platform/references/storage-datasets.md) |
 | 首次 dry-run、环境镜像与复用 | [environment-image.md](skills/szu-compute-platform/references/environment-image.md) |
@@ -95,8 +96,14 @@ cp -R szu-compute-platform/skills/szu-compute-platform \
 
 技能只保存通用流程，任务、镜像、依赖及验证记录留在使用方项目或产物中。修改后检查技能目录的元数据、相对引用和安装结果；平台内部接口按当前部署确认。
 
-在仓库根目录运行离线回归测试（仅依赖 Python 标准库，不访问平台或读取真实凭据）：
+在仓库根目录运行离线回归测试（依赖 Python / Node.js 标准库；本次 Node.js 测试版本为 24.21.0，不访问平台或读取真实凭据）：
 
 ```bash
 python -B -m unittest discover -s tests -v
+node skills/szu-compute-platform/scripts/test_login_mfa.cjs
+node skills/szu-compute-platform/scripts/test_login_storage.cjs
+node skills/szu-compute-platform/scripts/test_login_service.cjs
+node --test tests/test_login_edges.cjs tests/test_login_exchange.cjs
 ```
+
+登录回归覆盖原 CAS Cookie 接续、发送与重发限制、错码重试、失效与取消、登录交换和受限配置写入。真实认证记录与合成接口测试分别报告；健康接口就绪不代表账号登录成功。
